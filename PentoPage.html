@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writing Challenge</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f9; color: #333; text-align: center; margin: 0; padding: 0; }
+    body.dark-mode { background: #1e1e1e; color: #f4f4f9; }
+    main { max-width: 700px; margin: 40px auto; position: relative; }
+    textarea { width: 100%; height: 300px; font-size: 16px; margin-top: 20px; }
+    button { margin: 10px; padding: 10px 15px; font-size: 16px; cursor: pointer; }
+    #timer { font-size: 20px; margin-top: 10px; }
+    #popup { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    #popup-content { background: #fff; padding: 20px; border-radius: 8px; text-align: center; }
+    #popup-content p { color: #000; }
+    #topButtons { position: absolute; top: 10px; right: 10px; display: flex; }
+    .icon-btn { width: 32px; height: 32px; margin-left: 5px; cursor: pointer; border-radius: 50%; border: 1px solid #888; display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #555; }
+    .icon-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; fill: none; }
+    body.dark-mode .icon-btn { background: #333; border: 1px solid #ccc; color: #ccc; }
+    #promptBox { margin-top: 15px; padding: 10px; border: 1px solid #ccc; background: #fff; display: none; color: #000; }
+    body.dark-mode #promptBox { background: #333; color: #f4f4f9; border-color: #f4f4f9; }
+    #completionBox { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px solid #888; padding: 30px 40px; border-radius: 12px; background: #fff; color: #000; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; }
+    body.dark-mode #completionBox { background: #333; color: #f4f4f9; border-color: #ccc; }
+    #completionBox .closeBtn { position: absolute; top: 5px; right: 10px; cursor: pointer; font-weight: bold; background: none; border: none; font-size: 18px; }
+    #completionBox .report { margin: 10px 0; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Writing Challenge</h1>
+    <div id="topButtons">
+      <div id="promptBtn" class="icon-btn" title="Get Prompt">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      <div id="darkModeBtn" class="icon-btn" title="Toggle Dark Mode">
+        <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </div>
+    </div>
+    <label for="timeSelect">Choose time:</label>
+    <select id="timeSelect">
+      <option value="1">1 min</option>
+      <option value="3">3 min</option>
+      <option value="5">5 min</option>
+      <option value="10">10 min</option>
+      <option value="15">15 min</option>
+      <option value="20">20 min</option>
+      <option value="30">30 min</option>
+    </select>
+    <button id="startBtn">Start</button>
+    <div id="timer">Time: 0:00</div>
+    <textarea id="writingBox" disabled placeholder="Start writing here..."></textarea>
+    <div id="promptBox"></div>
+    <div id="completionBox">
+      <button class="closeBtn" id="closeCompletionBtn">X</button>
+      <div>You did it!</div>
+      <div class="report" id="completionReport"></div>
+      <button id="keepWritingBtn">Keep Writing?</button>
+      <button id="copyTextBtn">Copy Text</button>
+    </div>
+  </main>
+  <div id="popup">
+    <div id="popup-content">
+      <p>Oops! You stopped writing for too long.</p>
+      <button id="tryAgainBtn">Try Again</button>
+    </div>
+  </div>
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const writingBox = document.getElementById('writingBox');
+    const timerDisplay = document.getElementById('timer');
+    const popup = document.getElementById('popup');
+    const tryAgainBtn = document.getElementById('tryAgainBtn');
+    const timeSelect = document.getElementById('timeSelect');
+    const darkModeBtn = document.getElementById('darkModeBtn');
+    const promptBtn = document.getElementById('promptBtn');
+    const promptBox = document.getElementById('promptBox');
+    const completionBox = document.getElementById('completionBox');
+    const keepWritingBtn = document.getElementById('keepWritingBtn');
+    const copyTextBtn = document.getElementById('copyTextBtn');
+    const closeCompletionBtn = document.getElementById('closeCompletionBtn');
+    const completionReport = document.getElementById('completionReport');
+
+    let countdown, idleTimer, timeLeft, currentDuration;
+
+    const prompts = [
+      "Write about a time you overcame a challenge.",
+      "Describe your favorite place in vivid detail.",
+      "What would life be like in 100 years?",
+      "If you could talk to your future self, what would you say?",
+      "Write about someone who inspires you.",
+      "Imagine a world without technology—what happens?",
+      "Tell a story that starts with: 'It was the last day of summer...'"
+    ];
+
+    function startSession() {
+      clearInterval(countdown);
+      clearTimeout(idleTimer);
+      writingBox.value = '';
+      writingBox.disabled = false;
+      writingBox.focus();
+      popup.style.display = 'none';
+      completionBox.style.display = 'none';
+      promptBox.style.display = 'none';
+
+      currentDuration = parseInt(timeSelect.value);
+      timeLeft = currentDuration * 60;
+      updateTimerDisplay();
+
+      countdown = setInterval(() => {
+        timeLeft--;
+        updateTimerDisplay();
+        if (timeLeft <= 0) {
+          clearInterval(countdown);
+          clearTimeout(idleTimer);
+          endSession();
+        }
+      }, 1000);
+
+      resetIdleTimer();
+      writingBox.onkeydown = resetIdleTimer;
+    }
+
+    function resetIdleTimer() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        clearInterval(countdown);
+        writingBox.disabled = true;
+        popup.style.display = 'flex';
+      }, 10000);
+    }
+
+    function updateTimerDisplay() {
+      const m = Math.floor(timeLeft / 60);
+      const s = timeLeft % 60;
+      timerDisplay.textContent = `Time: ${m}:${s.toString().padStart(2,'0')}`;
+    }
+
+    function endSession() {
+      writingBox.disabled = true;
+      const wordCount = writingBox.value.split(/\s+/).filter(word => word.length>0).length;
+      completionReport.textContent = `Time Written: ${currentDuration} min | Word Count: ${wordCount}`;
+      completionBox.style.display = 'block';
+    }
+
+    keepWritingBtn.addEventListener('click', () => {
+      completionBox.style.display = 'none';
+      writingBox.disabled = false;
+      writingBox.focus();
+      timerDisplay.textContent = 'Time: Free Writing';
+    });
+
+    closeCompletionBtn.addEventListener('click', () => {
+      completionBox.style.display = 'none';
+    });
+
+    copyTextBtn.addEventListener('click', () => {
+      const wordCount = writingBox.value.split(/\s+/).filter(word => word.length>0).length;
+      const textToCopy = `---\nTime: ${new Date().toLocaleString()}\nDuration: ${currentDuration} min\nWord Count: ${wordCount}\n---\n${writingBox.value}`;
+      navigator.clipboard.writeText(textToCopy);
+      alert('Text copied to clipboard!');
+    });
+
+    darkModeBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+    });
+
+    promptBtn.addEventListener('click', () => {
+      const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+      promptBox.textContent = randomPrompt;
+      promptBox.style.display = 'block';
+    });
+
+    startBtn.addEventListener('click', startSession);
+    tryAgainBtn.addEventListener('click', startSession);
+  </script>
+</body>
+</html>
